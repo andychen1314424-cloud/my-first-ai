@@ -1,0 +1,9 @@
+{
+  "name": "ZX AI",
+  "short_name": "ZX AI",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F9FB",
+  "theme_color": "#F8F9FB",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

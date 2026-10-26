@@ -1,4 +1,4 @@
-:root {
+:host {
   font-family:
     Inter,
     -apple-system,
@@ -20,7 +20,7 @@
 * {
   box-sizing: border-box;
 }
-body {
+:host {
   margin: 0;
 }
 button,

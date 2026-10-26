@@ -6,12 +6,14 @@ import { AppError, EXAMPLE_BRIEF, EXAMPLE_PLAN, validateBrief } from '../shared/
 import type { Store } from './store.ts';
 import type { createOllama } from './ollama.ts';
 import { toMarkdown } from './export.ts';
+import type { FinanceStore } from './finance.ts';
 
 type Options = {
   store: Store;
   ollama: ReturnType<typeof createOllama>;
   staticDir: string;
   dev?: boolean;
+  finance?: FinanceStore;
 };
 function json(res: ServerResponse, code: number, data: unknown) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -41,7 +43,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-export function createApp({ store, ollama, staticDir, dev = false }: Options) {
+export function createApp({ store, ollama, staticDir, dev = false, finance }: Options) {
   let generating = false;
   const server = createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -67,7 +69,36 @@ export function createApp({ store, ollama, staticDir, dev = false }: Options) {
       const method = req.method || 'GET';
       const path = url.pathname;
       if (path === '/api/health' && method === 'GET')
-        return json(res, 200, { ok: true, mode: 'local-only', version: '0.1.0' });
+        return json(res, 200, { ok: true, mode: 'local-only', version: '2.0.0-integration.1' });
+      if (path.startsWith('/api/finance/')) {
+        if (!finance) throw new AppError('财务存储尚未启用。', 503);
+        if (path === '/api/finance/snapshot' && method === 'GET')
+          return json(res, 200, finance.snapshot(url.searchParams.get('month') ?? undefined));
+        if (path === '/api/finance/accounts' && method === 'POST')
+          return json(res, 201, finance.createAccount(await readJson(req)));
+        if (path === '/api/finance/transactions' && method === 'POST')
+          return json(res, 201, finance.createTransaction(await readJson(req), req.headers['idempotency-key']));
+        const transaction = /^\/api\/finance\/transactions\/([^/]+)$/.exec(path);
+        if (transaction && method === 'PUT')
+          return json(res, 200, finance.updateTransaction(decodeURIComponent(transaction[1]), await readJson(req)));
+        if (transaction && method === 'DELETE') {
+          finance.deleteTransaction(decodeURIComponent(transaction[1]));
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+        const budget = /^\/api\/finance\/budget\/([^/]+)$/.exec(path);
+        if (budget && method === 'PUT')
+          return json(res, 200, finance.setBudget(decodeURIComponent(budget[1]), await readJson(req)));
+        const repayment = /^\/api\/finance\/liabilities\/([^/]+)\/repayments$/.exec(path);
+        if (repayment && method === 'POST') {
+          finance.repayLiability(decodeURIComponent(repayment[1]), await readJson(req), req.headers['idempotency-key']);
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+        throw new AppError('财务接口不存在。', 404);
+      }
       if (path === '/api/models' && method === 'GET') return json(res, 200, await ollama.status());
       if (path === '/api/projects' && method === 'GET') return json(res, 200, store.list());
       if (path === '/api/examples' && method === 'POST') {
@@ -130,6 +161,7 @@ export function createApp({ store, ollama, staticDir, dev = false }: Options) {
           '.css': 'text/css',
           '.svg': 'image/svg+xml',
           '.map': 'application/json',
+          '.webmanifest': 'application/manifest+json',
         };
         res.writeHead(200, {
           'Content-Type': `${types[extname(file)] || 'application/octet-stream'}; charset=utf-8`,

@@ -4,13 +4,16 @@ import { join, resolve } from 'node:path';
 import { createApp } from '../server/app.ts';
 import { createOllama } from '../server/ollama.ts';
 import { openStore } from '../server/store.ts';
+import { openFinanceStore } from '../server/finance.ts';
 import { mockOllama, listen, close } from './helpers.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'zx-e2e-'));
 const fake = await mockOllama();
 const store = openStore(join(dir, 'projects.sqlite'));
+const finance = openFinanceStore(join(dir, 'finance.sqlite'));
 const app = createApp({
   store,
+  finance,
   ollama: createOllama(fake.url),
   staticDir: resolve(import.meta.dirname, '../dist'),
 });
@@ -23,6 +26,7 @@ async function stop() {
   await close(app);
   await fake.close();
   store.close();
+  finance.close();
   rmSync(dir, { recursive: true, force: true });
 }
 process.on('SIGTERM', () => void stop());

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { createApp } from './app.ts';
 import { createOllama } from './ollama.ts';
 import { openStore } from './store.ts';
+import { openFinanceStore } from './finance.ts';
 
 const root = resolve(import.meta.dirname, '..');
 const port = Number(process.env.ZX_PORT || 4173);
@@ -15,7 +16,8 @@ if (!dev && !existsSync(join(root, 'dist/index.html'))) {
 }
 const ollama = createOllama(process.env.ZX_OLLAMA_URL);
 const store = openStore(join(process.env.ZX_DATA_DIR || join(root, '.data'), 'projects.sqlite'));
-const server = createApp({ store, ollama, staticDir: join(root, 'dist'), dev });
+const finance = openFinanceStore(join(process.env.ZX_DATA_DIR || join(root, '.data'), 'finance.sqlite'));
+const server = createApp({ store, finance, ollama, staticDir: join(root, 'dist'), dev });
 server.on('error', (error: NodeJS.ErrnoException) => {
   console.error(
     error.code === 'EADDRINUSE'
@@ -23,6 +25,7 @@ server.on('error', (error: NodeJS.ErrnoException) => {
       : '服务启动失败，请检查本地配置。',
   );
   store.close();
+  finance.close();
   process.exitCode = 1;
 });
 server.listen(port, '127.0.0.1', () =>
@@ -33,7 +36,7 @@ function stop() {
   if (stopping) return;
   stopping = true;
   server.closeAllConnections();
-  server.close(() => store.close());
+  server.close(() => { store.close(); finance.close(); });
 }
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
