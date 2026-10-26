@@ -6,7 +6,7 @@ test('create through the Ollama protocol, track progress, save notes, reload, ex
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
+  await page.goto('/#/lab');
   await expect(page.getByText('本地模型已就绪')).toBeVisible();
   await page.getByRole('button', { name: '学习笔记整理' }).click();
   await page.getByRole('button', { name: '看看这个功能背后的提示词' }).click();
@@ -45,7 +45,7 @@ test('create through the Ollama protocol, track progress, save notes, reload, ex
 
 test('mobile sample workflow stays usable and protects unsaved notes', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/#/lab');
   await page.getByRole('button', { name: /先看看一个完成的方案/ }).click();
   await expect(page.locator('.source-banner')).toContainText('人工教学示例');
   await page.getByRole('textbox', { name: '项目复盘' }).fill('还没保存的笔记');
@@ -64,7 +64,7 @@ test('unavailable Ollama shows setup and keeps real generation disabled', async 
       json: { connected: false, models: [], message: '无法连接 Ollama，请先启动本地服务。' },
     }),
   );
-  await page.goto('/');
+  await page.goto('/#/lab');
   await page.getByRole('button', { name: '文件整理工具' }).click();
   await expect(page.getByRole('button', { name: '生成我的项目' })).toBeDisabled();
   await expect(page.getByText('无法连接 Ollama，请先启动本地服务。')).toBeVisible();
@@ -72,4 +72,20 @@ test('unavailable Ollama shows setup and keeps real generation disabled', async 
   await page.getByRole('button', { name: /先看看一个完成的方案/ }).click();
   await expect(page.locator('.source-banner')).toContainText('非 AI 生成');
   await page.screenshot({ path: 'test-results/desktop-project.png', fullPage: true });
+});
+
+test('Lab shadow inputs ignore the global N shortcut and preserve unsaved notes across shell navigation', async ({ page }) => {
+  await page.goto('/#/lab');
+  await page.getByRole('button', { name: /先看看一个完成的方案/ }).click();
+  const notes = page.getByRole('textbox', { name: '项目复盘' });
+  await notes.pressSequentially('Need N for notes');
+  await expect(notes).toHaveValue('Need N for notes');
+  await expect(page.getByRole('dialog', { name: '记一笔', exact: true })).toBeHidden();
+  const navigation = page.locator('aside[aria-label="主导航"]');
+  await navigation.getByRole('link', { name: '首页', exact: true }).click();
+  await expect(notes).toBeHidden();
+  await navigation.getByRole('link', { name: '项目实验台', exact: true }).click();
+  await expect(notes).toBeVisible();
+  await expect(notes).toHaveValue('Need N for notes');
+  await expect(page.getByRole('button', { name: '保存复盘', exact: true })).toBeEnabled();
 });

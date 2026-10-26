@@ -1,4 +1,8 @@
-# 从输入到结果：读懂这条流程
+# 架构：ZX AI 2.0 与原项目实验台
+
+2.0 的 `src/App.tsx` 管理工作台外壳、hash 路由和共享记账弹窗；原实验台状态管理迁移到 `src/modules/lab/LabApp.tsx`，由 `LabFrame.tsx` 的开放 Shadow DOM 隔离全局 CSS。新 Finance 使用 `src/finance/httpApi.ts`，经 `server/app.ts` 调用 `server/finance.ts`，保存到独立 `finance.sqlite`。原项目库与 Ollama 调用边界保持独立。账务事务、迁移和备份见 [存储说明](FINANCE-STORAGE.md)，本轮实现与验证边界见 [验收记录](INTEGRATION-VERIFICATION.md)。
+
+下面介绍原项目实验台从输入到结构化结果的流程。
 
 本版本自动化的是「整理想法」，不会自动开发或执行项目。界面、后端和模型在同一台电脑上运行；浏览器负责交互，Node 负责验证、调用和保存，Ollama 负责本地推理。
 
@@ -22,7 +26,7 @@ flowchart TD
 | 层         | 文件                  | 做什么                                                |
 | ---------- | --------------------- | ----------------------------------------------------- |
 | 用户输入   | `src/NewProject.tsx`  | 收集想法与限制，展示连接状态和提示词                  |
-| 浏览器状态 | `src/App.tsx`         | 管理请求、当前项目、未保存复盘、取消与导航            |
+| 浏览器状态 | `src/modules/lab/LabApp.tsx` | 管理请求、当前项目、未保存复盘、取消与导航       |
 | 输出显示   | `src/ProjectView.tsx` | 用 React 文本节点显示模型结果，不渲染模型 HTML        |
 | 通用约定   | `shared/domain.ts`    | 类型、校验、输出 Schema、提示词版本和示例             |
 | 请求边界   | `server/app.ts`       | 同源校验、32 KB 请求限制、路由、静态页面              |
