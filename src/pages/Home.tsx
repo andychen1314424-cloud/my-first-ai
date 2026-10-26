@@ -1,6 +1,6 @@
 import { ArrowRight, FlaskConical, MessageSquare, Target, Plus, Wallet } from 'lucide-react';
 import { Link, navigate } from '../router';
-import { DemoTag, DevTag } from '../ui/primitives';
+import { DemoTag } from '../ui/primitives';
 import { useFinance } from '../finance/FinanceContext';
 import { useAssistant } from '../assistant/AssistantContext';
 import { overview } from '../finance/calc';
@@ -11,7 +11,7 @@ const fmtDate = () => new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'nu
 
 export function HomePage() {
   const { snap, openQuickAdd } = useFinance();
-  const { newChat, conversations, setActive } = useAssistant();
+  const { newChat, conversations, setActive, aiStatus, selectedModel, creating } = useAssistant();
   const o = snap ? overview(snap) : null;
   const catName = (id?: string) => snap?.categories.find((c) => c.id === id)?.name ?? '';
 
@@ -29,7 +29,7 @@ export function HomePage() {
 
       <section className="quick" aria-label="快捷操作">
         <button className="btn btn-primary" onClick={() => openQuickAdd()}><Plus size={16} /> 记一笔</button>
-        <button className="btn" onClick={() => { newChat(); navigate('/assistant'); }}><MessageSquare size={16} /> 新对话</button>
+        <button className="btn" disabled={creating} onClick={() => { navigate('/assistant'); void newChat(); }}><MessageSquare size={16} /> 新对话</button>
         <Link to="/finance/budget" className="btn"><Target size={16} /> 查看预算</Link>
         <Link to="/lab" className="btn"><FlaskConical size={16} /> 新建项目</Link>
       </section>
@@ -46,9 +46,9 @@ export function HomePage() {
           <span className="module-go">打开 <ArrowRight size={14} /></span>
         </Link>
         <Link to="/assistant" className="card module">
-          <div className="module-head"><MessageSquare size={20} /><h2>AI 助手</h2><DevTag label="演示" /></div>
-          <p className="module-text">提问、整理想法，也能查询你的账本。</p>
-          <p className="muted">Qwen3 尚未连接</p>
+          <div className="module-head"><MessageSquare size={20} /><h2>AI 助手</h2></div>
+          <p className="module-text">使用本地模型写作、提问和整理想法，对话保存在这台电脑。</p>
+          <p className="muted inline"><i className={`status-dot ${selectedModel?.available ? '' : 'off'}`} />{selectedModel?.available ? `${selectedModel.name} · 本地可用` : aiStatus.message}</p>
           <span className="module-go">打开 <ArrowRight size={14} /></span>
         </Link>
         <Link to="/lab" className="card module">

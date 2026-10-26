@@ -6,14 +6,21 @@ import { createOllama } from '../server/ollama.ts';
 import { openStore } from '../server/store.ts';
 import { openFinanceStore } from '../server/finance.ts';
 import { mockOllama, listen, close } from './helpers.ts';
+import { mockChatOllama } from './chat-fixture.ts';
+import { createAiProvider } from '../server/ai-provider.ts';
+import { openChatStore } from '../server/chat-store.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'zx-e2e-'));
 const fake = await mockOllama();
+const chatFake = await mockChatOllama();
+const chat = openChatStore(join(dir, 'chat.sqlite'));
 const store = openStore(join(dir, 'projects.sqlite'));
 const finance = openFinanceStore(join(dir, 'finance.sqlite'));
 const app = createApp({
   store,
   finance,
+  chat,
+  ai: createAiProvider(chatFake.url),
   ollama: createOllama(fake.url),
   staticDir: resolve(import.meta.dirname, '../dist'),
 });
@@ -25,6 +32,8 @@ async function stop() {
   stopping = true;
   await close(app);
   await fake.close();
+  await chatFake.close();
+  chat.close();
   store.close();
   finance.close();
   rmSync(dir, { recursive: true, force: true });

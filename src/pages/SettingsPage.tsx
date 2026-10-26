@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ConfirmDialog, DevTag, PageHead, Segmented } from '../ui/primitives';
+import { ConfirmDialog, PageHead, Segmented } from '../ui/primitives';
 import { useToast } from '../ui/toast';
 import { useTheme, type ThemePref } from '../theme';
 import { useFinance } from '../finance/FinanceContext';
+import { ModelCenter } from '../assistant/ModelCenter';
 
 export function SettingsPage() {
   const { pref, setPref } = useTheme();
@@ -24,15 +25,7 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="settings-group">
-        <h2 className="h2">AI 模型</h2>
-        <ul className="list card">
-          <li className="row"><span className="row-main">当前模型</span><span className="muted">Qwen3（本地 Ollama）</span></li>
-          <li className="row"><span className="row-main">连接状态</span><span className="inline"><i className="status-dot off" /> 未连接 <DevTag /></span></li>
-          <li className="row"><span className="row-main">切换到千问云端 API</span><DevTag /></li>
-        </ul>
-        <p className="hint">模型和密钥由后端管理，前端不会保存任何 API Key。</p>
-      </section>
+      <ModelCenter />
 
       <section className="settings-group">
         <h2 className="h2">数据</h2>

@@ -4,6 +4,9 @@ import { createApp } from './app.ts';
 import { createOllama } from './ollama.ts';
 import { openStore } from './store.ts';
 import { openFinanceStore } from './finance.ts';
+import { openChatStore } from './chat-store.ts';
+import { createAiProvider } from './ai-provider.ts';
+import { withDownloadStatus } from './model-download-status.ts';
 
 const root = resolve(import.meta.dirname, '..');
 const port = Number(process.env.ZX_PORT || 4173);
@@ -17,7 +20,9 @@ if (!dev && !existsSync(join(root, 'dist/index.html'))) {
 const ollama = createOllama(process.env.ZX_OLLAMA_URL);
 const store = openStore(join(process.env.ZX_DATA_DIR || join(root, '.data'), 'projects.sqlite'));
 const finance = openFinanceStore(join(process.env.ZX_DATA_DIR || join(root, '.data'), 'finance.sqlite'));
-const server = createApp({ store, finance, ollama, staticDir: join(root, 'dist'), dev });
+const chat = openChatStore(join(process.env.ZX_DATA_DIR || join(root, '.data'), 'chat.sqlite'));
+const ai = withDownloadStatus(createAiProvider(process.env.ZX_OLLAMA_URL), join(process.env.ZX_DATA_DIR || join(root, '.data'), 'model-downloads'));
+const server = createApp({ store, finance, chat, ai, ollama, staticDir: join(root, 'dist'), dev });
 server.on('error', (error: NodeJS.ErrnoException) => {
   console.error(
     error.code === 'EADDRINUSE'
@@ -26,6 +31,7 @@ server.on('error', (error: NodeJS.ErrnoException) => {
   );
   store.close();
   finance.close();
+  chat.close();
   process.exitCode = 1;
 });
 server.listen(port, '127.0.0.1', () =>
@@ -36,7 +42,7 @@ function stop() {
   if (stopping) return;
   stopping = true;
   server.closeAllConnections();
-  server.close(() => { store.close(); finance.close(); });
+  server.close(() => { store.close(); finance.close(); chat.close(); });
 }
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
