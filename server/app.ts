@@ -7,6 +7,10 @@ import type { Store } from './store.ts';
 import type { createOllama } from './ollama.ts';
 import { toMarkdown } from './export.ts';
 import type { FinanceStore } from './finance.ts';
+import { validateChatInput } from './chat-store.ts';
+import type { ChatStore } from './chat-store.ts';
+import type { AIProvider } from './ai-provider.ts';
+import type { ChatEvent } from '../shared/chat.ts';
 
 type Options = {
   store: Store;
@@ -14,6 +18,8 @@ type Options = {
   staticDir: string;
   dev?: boolean;
   finance?: FinanceStore;
+  chat?: ChatStore;
+  ai?: AIProvider;
 };
 function json(res: ServerResponse, code: number, data: unknown) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -43,8 +49,9 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-export function createApp({ store, ollama, staticDir, dev = false, finance }: Options) {
+export function createApp({ store, ollama, staticDir, dev = false, finance, chat, ai }: Options) {
   let generating = false;
+  let chatting = false;
   const server = createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -70,6 +77,87 @@ export function createApp({ store, ollama, staticDir, dev = false, finance }: Op
       const path = url.pathname;
       if (path === '/api/health' && method === 'GET')
         return json(res, 200, { ok: true, mode: 'local-only', version: '2.0.0-integration.1' });
+      if (path === '/api/ai/status' && method === 'GET') {
+        if (!ai) throw new AppError('本地聊天模型服务尚未启用。', 503);
+        return json(res, 200, await ai.status());
+      }
+      if (path.startsWith('/api/chat/')) {
+        if (!chat || !ai) throw new AppError('本地聊天服务尚未启用。', 503);
+        if (path === '/api/chat/conversations' && method === 'GET') return json(res, 200, chat.list());
+        if (path === '/api/chat/conversations' && method === 'POST') return json(res, 201, chat.create(await readJson(req)));
+        const conversation = /^\/api\/chat\/conversations\/([^/]+)(\/messages)?$/.exec(path);
+        if (conversation) {
+          const id = decodeURIComponent(conversation[1]);
+          const messages = !!conversation[2];
+          if (!messages && method === 'GET') return json(res, 200, chat.get(id));
+          if (!messages && method === 'PATCH') return json(res, 200, chat.rename(id, await readJson(req)));
+          if (!messages && method === 'DELETE') {
+            chat.remove(id); res.writeHead(204); res.end(); return;
+          }
+          if (messages && method === 'POST') {
+            const input = validateChatInput(await readJson(req));
+            const replay = chat.lookup(id, input);
+            const event = (value: ChatEvent) => {
+              if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(value) + '\n');
+            };
+            const streamHeaders = () => {
+              res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'X-Accel-Buffering': 'no' });
+              res.flushHeaders();
+            };
+            if (replay) {
+              streamHeaders(); event({ type: 'start', ...replay });
+              if (replay.assistant.status === 'complete') event({ type: 'done', message: replay.assistant });
+              else event({ type: 'error', error: replay.assistant.error || '上次生成未完成，可重新提问。', message: replay.assistant });
+              res.end(); return;
+            }
+            if (chatting) throw new AppError('已有一条消息正在生成，请先停止或等待完成。', 409);
+            chatting = true;
+            const abort = new AbortController();
+            const onClose = () => { if (!res.writableEnded) abort.abort(); };
+            res.once('close', onClose);
+            let begun = false;
+            let text = '';
+            let checkpoint = Date.now();
+            try {
+              await ai.assertModel(input.modelId, abort.signal);
+              abort.signal.throwIfAborted();
+              const exchange = chat.begin(id, input);
+              begun = true;
+              const context = chat.context(id, exchange.user);
+              streamHeaders(); event({ type: 'start', ...exchange });
+              try {
+                await ai.stream(input.modelId, context, abort.signal, (delta) => {
+                  text += delta;
+                  if (text.length > 65536) throw new AppError('模型回复超出保存上限。', 502);
+                  if (Date.now() - checkpoint >= 500) {
+                    chat.checkpoint(input.requestId, text); checkpoint = Date.now();
+                  }
+                  event({ type: 'delta', text: delta });
+                });
+                abort.signal.throwIfAborted();
+                const message = chat.finish(input.requestId, text, 'complete');
+                begun = false;
+                event({ type: 'done', message });
+              } catch (error) {
+                const stopped = abort.signal.aborted || (error instanceof AppError && error.status === 499);
+                const reason = stopped ? '生成已停止，已保留已收到的回复。' : error instanceof AppError ? error.message : '本地生成失败，已保留已收到的回复。';
+                const message = chat.finish(input.requestId, text.slice(0, 65536), stopped ? 'stopped' : 'error', reason);
+                begun = false;
+                event({ type: 'error', error: reason, message });
+              }
+              if (!res.destroyed && !res.writableEnded) res.end();
+              return;
+            } finally {
+              if (begun) {
+                try { chat.finish(input.requestId, text.slice(0, 65536), 'error', '生成中断，已保留已收到的回复。'); } catch { /* Startup recovery handles any remaining pending row. */ }
+              }
+              chatting = false;
+              res.off('close', onClose);
+            }
+          }
+        }
+        throw new AppError('聊天接口不存在。', 404);
+      }
       if (path.startsWith('/api/finance/')) {
         if (!finance) throw new AppError('财务存储尚未启用。', 503);
         if (path === '/api/finance/snapshot' && method === 'GET')
@@ -172,6 +260,7 @@ export function createApp({ store, ollama, staticDir, dev = false, finance }: Op
       }
     } catch (error) {
       if (res.destroyed || res.writableEnded) return;
+      if (res.headersSent) { res.end(); return; }
       const status =
         error instanceof AppError ? error.status : error instanceof URIError ? 400 : 500;
       json(res, status, {
