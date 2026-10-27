@@ -45,7 +45,7 @@ export const CHAT_MODELS = [
   { id: 'qwen3:8b', name: 'Qwen3 · 8B', family: 'Qwen', detail: 'Qwen3 本地模型，8B 参数。' },
   { id: 'deepseek-r1:1.5b', name: 'DeepSeek R1 · 1.5B 蒸馏版', family: 'DeepSeek', detail: 'DeepSeek-R1-Distill-Qwen-1.5B 本地蒸馏模型，并非官方云端旗舰。' },
   { id: 'deepseek-r1:8b', name: 'DeepSeek R1 · 8B 蒸馏版', family: 'DeepSeek', detail: 'DeepSeek-R1-0528-Qwen3-8B 本地蒸馏模型，并非官方云端旗舰。' },
-  { id: 'hf.co/bartowski/moonshotai_Kimi-Linear-48B-A3B-Instruct-GGUF:Q4_K_M', name: 'Kimi Linear · 48B-A3B', family: 'Kimi', detail: 'Moonshot Kimi Linear 48B-A3B-Instruct；bartowski 社区 Q4_K_M GGUF。本地权重，不是 Kimi K2/K2.5 云端旗舰。' },
+  { id: 'hf.co/bartowski/moonshotai_Kimi-Linear-48B-A3B-Instruct-GGUF:Q4_K_M', name: 'Kimi Linear · 48B-A3B', family: 'Kimi', detail: 'Moonshot Kimi Linear 48B-A3B-Instruct；bartowski 社区 Q4_K_M GGUF。本地权重，不是 Kimi K2/K2.5 云端旗舰。使用 CPU 内存映射加载，首次启动可能较慢，最长等待 15 分钟，可随时停止。' },
 ] as const;
 
 export function isChatModel(id: unknown): id is string {

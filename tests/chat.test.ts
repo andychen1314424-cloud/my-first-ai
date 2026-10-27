@@ -103,6 +103,26 @@ test('missing, cloud and remote Ollama models never reach inference or insert me
   assert.equal(app.chat.get(c.id).messages.length, 0);
 });
 
+test('Kimi uses its own local CPU mapped weights and preserves the question without changing other models', async (t) => {
+  const app = await setup(t), c = await app.create();
+  const modelId = CHAT_MODELS.find((model) => model.family === 'Kimi')!.id;
+  app.fake.state.models.push(modelId);
+  const body = { ...input('合成 CPU 映射验证'), modelId };
+  const result = await events(await app.request(`/api/chat/conversations/${c.id}/messages`, 'POST', body));
+  assert.equal(result.at(-1)?.type, 'done');
+  const payload = app.fake.state.requests[0];
+  assert.equal(payload.model, modelId);
+  assert.equal(payload.think, false);
+  assert.deepEqual(payload.options, { temperature: 0.5, num_ctx: 16384, num_predict: 2048, num_gpu: 0, use_mmap: true });
+  assert.equal((payload.messages as { content: string }[]).at(-1)!.content, body.text);
+  assert.equal(app.chat.get(c.id).messages[0].text, body.text);
+  assert.equal(app.chat.get(c.id).messages[1].modelId, modelId);
+  await events(await app.request(`/api/chat/conversations/${c.id}/messages`, 'POST', input()));
+  const qwenOptions = app.fake.state.requests[1].options as Record<string, unknown>;
+  assert.equal(qwenOptions.num_gpu, undefined);
+  assert.equal(qwenOptions.use_mmap, undefined);
+});
+
 test('bad JSON, unfinished replies and output limits remain visible failures instead of fake completed answers', async (t) => {
   const app = await setup(t);
   for (const mode of ['badJSON', 'unfinished', 'length', 'upstreamError'] as const) {

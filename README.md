@@ -40,6 +40,8 @@ npm start
 
 助手回复为真实模型生成，不再使用演示模板。会话和每条回复所用模型保存到 SQLite；停止/网络断开会保留已收到的部分，超时、输出截断和空答案明确标记失败。消息请求 ID 防止不确定网络结果导致重复生成。上下文只传最近最多 10 个完整轮次且正文合计不超过 12000 字符，更早历史仍可查看。
 
+2026-10-27 本机状态：DeepSeek 8B 与 Kimi 的权重均已下载并安装到 D 盘。DeepSeek 8B 已经通过本网站真实聊天接口完成回复并持久化，约 22.17 秒。Kimi 曾因 CUDA 主机内存分配失败无法启动；现已加入 CPU 内存映射配置（`num_gpu: 0`、`use_mmap: true`），保持 16K token 上下文，默认最长等待 15 分钟，可随时停止。直接 Ollama 的 CPU 短答诊断曾在约 44.797 秒成功，但修复后的网站真实聊天验收仍待完成；目前 Ollama 模型发现异常，不能据此声称 Kimi 已在网站可用。
+
 聊天暂未接财务工具或文件/联网能力，不会自动把真实账本发给模型。自然语言记账仍为规则提案；用户确认后才保存。模型目录、D 盘配置、下载和推理验证边界见 [本地 AI 说明](docs/LOCAL-AI.md)。
 
 本轮无云端 Provider 实现、无云端请求、无付费回退。DeepSeek / Kimi / Qwen 云端扩展仍需单独确认数据发送范围与费用后实施。
@@ -68,7 +70,7 @@ npm run check
 npm run test:e2e
 ```
 
-`check` 包含前端构建和 Node 测试。`test:e2e` 使用临时 SQLite 与明确标注的 Ollama 协议 fixture；fixture 不是实测模型。聊天迭代已通过 42 项 Node 测试和 11 项浏览器测试，包含财务和原实验台回归。首次运行需已有 Playwright Chromium，或设置 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指向 Chrome/Edge 可执行文件。
+`check` 包含前端构建和 Node 测试。`test:e2e` 使用临时 SQLite 与明确标注的 Ollama 协议 fixture；fixture 不是实测模型。2026-10-27 的 CPU 映射修复已通过 43 项 Node 测试和 11 项浏览器测试，包含 Kimi 专属参数、财务和原实验台回归。首次运行需已有 Playwright Chromium，或设置 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指向 Chrome/Edge 可执行文件。
 
 实测结果与局限见 [本轮验收记录](docs/INTEGRATION-VERIFICATION.md)。手机验证是 Chromium 390px 视口，不等于真实 iPhone Safari / Android 验收。
 

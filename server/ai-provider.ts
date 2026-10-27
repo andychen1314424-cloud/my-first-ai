@@ -12,7 +12,7 @@ export interface AIProvider {
 export const CHAT_SYSTEM_PROMPT = '你是 ZX AI 本地助手，用准确简洁的中文回答，只给最终答案。你没有联网、文件、命令或账本工具，不能执行操作或读取财务数据。不要编造用户的账户、收支、负债、预算数字；请用户提供数据或到财务页面核对。不要冒充其他型号或云端旗舰。上下文仅最近最多 10 完整轮、正文合计 12000 字符，早期内容可能未包含。';
 
 /** Replaceable local-provider boundary. There is deliberately no cloud implementation. */
-export function createAiProvider(baseURL = 'http://127.0.0.1:11434', timeoutMs = 180000): AIProvider {
+export function createAiProvider(baseURL = 'http://127.0.0.1:11434', timeoutMs?: number): AIProvider {
   const base = new URL(baseURL);
   if (base.protocol !== 'http:' || base.hostname !== '127.0.0.1' || base.username || base.password || base.pathname !== '/' || base.search || base.hash)
     throw new Error('ZX_OLLAMA_URL 只能使用 http://127.0.0.1:端口。');
@@ -97,11 +97,14 @@ export function createAiProvider(baseURL = 'http://127.0.0.1:11434', timeoutMs =
       // https://huggingface.co/Qwen/Qwen3-4B#advanced-usage-switching-between-thinking-and-non-thinking-modes-via-user-input
       const providerMessages = messages.map((message) => ({ ...message }));
       const qwen = modelId.startsWith('qwen3:');
+      // The 30 GB Kimi GGUF cannot allocate CUDA_Host buffers on this machine.
+      // CPU memory mapping uses the same local weights without a GPU copy.
+      const kimi = CHAT_MODELS.some((model) => model.id === modelId && model.family === 'Kimi');
       if (qwen) {
         const latestUser = providerMessages.findLastIndex((message) => message.role === 'user');
         if (latestUser >= 0) providerMessages[latestUser].content += '\n/no_think';
       }
-      const timeout = AbortSignal.timeout(timeoutMs);
+      const timeout = AbortSignal.timeout(timeoutMs ?? (kimi ? 900000 : 180000));
       const combined = AbortSignal.any([signal, timeout]);
       let response: Response | undefined;
       let completed = false;
@@ -139,7 +142,7 @@ export function createAiProvider(baseURL = 'http://127.0.0.1:11434', timeoutMs =
       try {
         response = await fetch(new URL('/api/chat', base), {
           method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: modelId, messages: [{ role: 'system', content: CHAT_SYSTEM_PROMPT }, ...providerMessages], stream: true, think: qwen, options: { temperature: 0.5, num_ctx: 16384, num_predict: qwen ? 4096 : 2048 } }),
+          body: JSON.stringify({ model: modelId, messages: [{ role: 'system', content: CHAT_SYSTEM_PROMPT }, ...providerMessages], stream: true, think: qwen, options: { temperature: 0.5, num_ctx: 16384, num_predict: qwen ? 4096 : 2048, ...(kimi ? { num_gpu: 0, use_mmap: true } : {}) } }),
           signal: combined,
         });
         if (!response.ok) throw new AppError(`本地模型返回 ${response.status}，请检查 Ollama 日志与模型兼容性。`, 502);
